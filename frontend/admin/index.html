@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1f3a5f">
+<title>Attendance Admin - GWC Data.AI</title>
+</head>
+<body class="adm">
+<header>
+  <strong>GWC Data.AI - Attendance Admin</strong>
+  <span id="who" hidden><span id="who-email"></span> · <span id="role"></span> · <a href="#" id="logout" style="color:#fff">Sign out</a></span>
+</header>
+<nav id="tabs" hidden></nav>
+<main>
+  <div id="msg" class="msg" hidden></div>
+  <section id="login" class="panel" hidden style="max-width:480px">
+    <h2>Admin sign-in</h2>
+    <p class="muted">Only approved HR/admin accounts can open this portal.</p>
+    <a id="login-btn" class="btn primary" href="#">Sign in with company account</a>
+    <form id="dev-form" class="dev" hidden autocomplete="off">
+      <p class="muted"><strong>DEV ONLY</strong> – not company authentication.</p>
+      <input id="dev-email" type="email" placeholder="name@gwcdata.ai" required>
+      <button class="btn primary" type="submit">Dev sign-in</button>
+    </form>
+  </section>
+  <section id="denied" class="panel" hidden style="max-width:480px">
+    <h2>Admin access denied</h2>
+    <p>The account <strong id="denied-email"></strong> is not an approved admin.</p>
+    <button id="denied-out" class="btn primary" type="button">Sign out</button>
+  </section>
+  <div id="view"></div>
+</main>
+<script type="module" src="/src/admin.js"></script>
+</body>
+</html>

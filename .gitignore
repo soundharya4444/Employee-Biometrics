@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+storage/*.db
+storage/*.csv
+storage/reports/*
+storage/qr/*
+storage/backups/*
+!storage/reports/.gitkeep
+*.xlsx
+*.lock
+.vscode/

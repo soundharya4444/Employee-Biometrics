@@ -1,0 +1,15 @@
+{
+  "name": "gwc-attendance-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Employee attendance + admin portal UI. Static build deployed to Vercel; talks to the FastAPI backend over HTTPS.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0"
+  }
+}

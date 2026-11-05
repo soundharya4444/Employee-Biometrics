@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1f3a5f">
+<title>Employee Attendance - GWC Data.AI</title>
+</head>
+<body class="emp">
+<main class="card-wrap">
+  <header class="hero">
+    <svg class="fp" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+      <path d="M14 26c0-10 8-18 18-18s18 8 18 18"/><path d="M20 54c-3-6-4-12-4-19 0-9 7-16 16-16s16 7 16 16c0 5-1 9-2 13"/>
+      <path d="M26 56c-2-5-3-10-3-16 0-5 4-9 9-9s9 4 9 9c0 6-1 11-3 16"/><path d="M32 40c0 6 1 11 3 15"/>
+    </svg>
+    <h1>Employee Attendance</h1>
+    <p class="sub">Biometric Punch System</p>
+    <div id="clock-time" class="clock" aria-live="off">--:-- --</div>
+    <div id="clock-date" class="date"></div>
+  </header>
+
+  <div id="msg" class="msg" role="status" hidden></div>
+
+  <section id="view-loading" class="panel"><div class="spinner"></div><p class="muted center">Loading…</p></section>
+
+  <section id="view-login" class="panel" hidden>
+    <h2>Sign in</h2>
+    <p class="muted">Use your company Google account (<span id="domain"></span>) to continue.</p>
+    <a id="login-btn" class="btn primary" href="#">Sign in with company account</a>
+    <form id="dev-form" class="dev" hidden autocomplete="off">
+      <p class="muted"><strong>DEV ONLY</strong> – not company authentication. Type your company email:</p>
+      <input id="dev-email" type="email" placeholder="name@gwcdata.ai" required>
+      <button class="btn primary" id="dev-btn" type="submit">Dev sign-in</button>
+    </form>
+  </section>
+
+  <section id="view-register" class="panel" hidden>
+    <h2>First-time registration</h2>
+    <p class="muted">Signed in as <strong id="reg-email"></strong>. Your Employee ID will be linked to this verified account.</p>
+    <form id="reg-form" autocomplete="off" novalidate>
+      <label>Employee ID<input id="reg-id" maxlength="32" placeholder="e.g. 210145" required></label>
+      <label>Employee Name<input id="reg-name" maxlength="200" placeholder="Your full name" required></label>
+      <label>Company Email ID<input id="reg-mail" type="email" readonly></label>
+      <button class="btn primary" id="reg-btn" type="submit">Register</button>
+    </form>
+  </section>
+
+  <section id="view-main" hidden>
+    <div class="panel">
+      <h2>Employee Details</h2>
+      <dl class="details">
+        <div><dt>Employee ID</dt><dd id="d-id"></dd></div>
+        <div><dt>Employee Name</dt><dd id="d-name"></dd></div>
+        <div><dt>Mail ID</dt><dd id="d-mail"></dd></div>
+      </dl>
+    </div>
+    <div class="actions">
+      <button id="btn-in" class="btn punch in" type="button"><span>PUNCH IN</span><small>Start Work</small></button>
+      <button id="btn-out" class="btn punch out" type="button"><span>PUNCH OUT</span><small>End Work</small></button>
+    </div>
+    <div id="remark-panel" class="panel remark" hidden>
+      <h2 id="rm-title"></h2>
+      <p id="rm-message"></p>
+      <p id="rm-detail" class="muted"></p>
+      <p id="rm-prompt"><strong></strong></p>
+      <form id="rm-form" novalidate>
+        <label>Reason<select id="rm-reason" required></select></label>
+        <label>Additional remarks (optional)<textarea id="rm-text" maxlength="1000" rows="3"></textarea></label>
+        <button class="btn primary" id="rm-btn" type="submit">Submit remark</button>
+      </form>
+    </div>
+    <div class="panel">
+      <h2>Today's Attendance</h2>
+      <dl class="details">
+        <div><dt>Punch In</dt><dd id="t-in">—</dd></div>
+        <div><dt>Punch Out</dt><dd id="t-out">—</dd></div>
+        <div><dt>Working Hours</dt><dd id="t-hours">—</dd></div>
+        <div><dt>Shift</dt><dd id="t-shift">—</dd></div>
+      </dl>
+      <p id="t-status" class="muted"></p>
+    </div>
+    <div class="panel">
+      <h2>My Remarks</h2>
+      <div id="my-remarks" class="muted">No remarks.</div>
+    </div>
+    <div class="panel">
+      <h2>Attendance Assistant</h2>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <input id="chat-input" maxlength="2000" placeholder="Ask about your attendance, shift or policy…" required>
+        <button class="btn primary" id="chat-btn" type="submit">Ask</button>
+      </form>
+    </div>
+    <button id="signout" class="link" type="button">Sign out</button>
+  </section>
+</main>
+<script type="module" src="/src/employee.js"></script>
+</body>
+</html>
