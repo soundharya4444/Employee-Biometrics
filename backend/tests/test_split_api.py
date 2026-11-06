@@ -45,7 +45,7 @@ def test_dev_login_is_json_and_domain_restricted(client, settings, monkeypatch):
 
 
 def test_unauthenticated_me_tells_frontend_whether_dev_login_exists(client):
-    assert client.get("/api/me").json() == {"state": "unauthenticated", "domain": DOMAIN, "dev_auth": True}
+    assert client.get("/api/me").json() == {"state": "unauthenticated", "domain": DOMAIN, "dev_auth": True, "poc_auth": False}
 
 
 def test_login_redirect_goes_back_to_frontend_in_dev(client, settings):

@@ -13,7 +13,7 @@ os.environ.update({
     "ASSISTANT_RATE_LIMIT": "1000", "DOMO_INSTANCE_URL": "", "DOMO_DEVELOPER_TOKEN": "", "DOMO_LLM_ENDPOINT_PATH": "",
     "MONITOR_ENABLED": "false", "ATTENDANCE_POLICY_FILE": "",
     # pinned so the tests never depend on the developer's real .env
-    "BASE_URL": "http://localhost:8000", "FRONTEND_URL": "http://localhost:5173", "CORS_EXTRA_ORIGINS": "",
+    "BASE_URL": "http://localhost:8000", "FRONTEND_URL": "http://localhost:5173",
     "COOKIE_SAMESITE": "lax", "COOKIE_DOMAIN": "", "TRUSTED_PROXIES": "", "REQUIRE_MASTER_LIST": "true",
     "COOKIE_SECURE": "false", "TIMEZONE": "Asia/Kolkata", "DEFAULT_SHIFT_START": "",
 })

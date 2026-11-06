@@ -28,6 +28,8 @@ def make_engine(url: str) -> Engine:
             cur.close()
 
         return eng
+    if url.startswith("postgres://"):  # some hosts hand out the legacy scheme
+        url = "postgresql://" + url[len("postgres://"):]
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return create_engine(url, pool_pre_ping=True)

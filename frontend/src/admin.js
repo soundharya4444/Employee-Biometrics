@@ -157,11 +157,15 @@ const tabs = {
 };
 
 // ---------------- boot: sign-in -> admin check -> tabs ----------------
+let pocAuth = false;
 function showLogin(me) {
   $("tabs").hidden = $("who").hidden = $("denied").hidden = true;
   $("login").hidden = false;
   $("login-btn").href = loginUrl("/admin/");
-  $("dev-form").hidden = !(me && me.dev_auth);
+  if (me && "poc_auth" in me) pocAuth = !!me.poc_auth;
+  $("dev-form").hidden = !(pocAuth || (me && me.dev_auth));
+  $("dev-empid").hidden = !pocAuth; $("dev-empid").required = pocAuth;
+  if (pocAuth) $("login-btn").hidden = true;
 }
 async function signOut() {
   try { await api("/auth/logout", { method: "POST" }); } catch (_) {}
@@ -171,7 +175,7 @@ $("logout").addEventListener("click", (e) => { e.preventDefault(); signOut(); })
 $("denied-out").addEventListener("click", signOut);
 $("dev-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  try { await api("/api/auth/dev-login", { method: "POST", body: JSON.stringify({ email: $("dev-email").value }) }); boot(); }
+  try { await api(pocAuth ? "/api/auth/poc-login" : "/api/auth/dev-login", { method: "POST", body: JSON.stringify(pocAuth ? { email: $("dev-email").value, employee_id: $("dev-empid").value } : { email: $("dev-email").value }) }); boot(); }
   catch (e) { notify(e.message, false); }
 });
 setUnauthorizedHandler(() => showLogin({}));

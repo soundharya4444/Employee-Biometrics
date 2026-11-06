@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"
     base_url: str = "http://localhost:8000"  # public URL of THIS backend API (used for the Google OAuth callback)
     frontend_url: str = "http://localhost:5173"  # public URL of the separate frontend (QR code target, post-login redirect)
-    cors_extra_origins: str = ""  # extra allowed frontend origins, comma separated (e.g. preview deployments)
     cookie_samesite: str = "lax"  # "lax" if frontend+backend share a registrable domain; "none" for cross-site (needs HTTPS)
     cookie_domain: str = ""  # e.g. ".gwcdata.ai" so app.gwcdata.ai and api.gwcdata.ai share the session cookie
     database_url: str = f"sqlite:///{(BASE_DIR / 'storage' / 'dev.db').as_posix()}"
@@ -31,6 +30,12 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     dev_auth_enabled: bool = False  # local development only; refused when app_env=production
+    # POC sign-in: e-mail + employee ID checked against the HR master list (no Google). NOT strong authentication.
+    poc_auth_enabled: bool = False
+
+    # Office-only access (no QR code: employees are given the page URL). Both rules apply to every API call.
+    desktop_only: bool = True  # refuse phones and tablets
+    office_ip_ranges: str = ""  # office PUBLIC IP/CIDRs, comma separated (e.g. 203.0.113.10,198.51.100.0/28). Empty = any network
     session_max_age_seconds: int = 12 * 3600
     admin_reauth_minutes: int = 60  # admins must have authenticated this recently
     cookie_secure: bool = False
@@ -92,15 +97,19 @@ class Settings(BaseSettings):
         return [ipaddress.ip_network(x, strict=False) for x in self._csv(self.trusted_proxies)]
 
     @property
+    def office_network_list(self):
+        return [ipaddress.ip_network(x, strict=False) for x in self._csv(self.office_ip_ranges)]
+
+    @property
     def bootstrap_admins(self) -> list[str]:
         return [x.lower() for x in self._csv(self.bootstrap_admin_emails)]
 
     @property
     def frontend_origins(self) -> list[str]:
-        """Origins allowed to call this API with credentials (CORS) and to submit state-changing requests (CSRF)."""
+        """The single origin (from FRONTEND_URL) allowed to call this API with credentials (CORS) and to submit state-changing requests (CSRF)."""
         from urllib.parse import urlparse
         out = []
-        for u in [self.frontend_url, *self._csv(self.cors_extra_origins)]:
+        for u in [self.frontend_url]:
             p = urlparse(u.strip())
             if p.scheme and p.netloc:
                 o = f"{p.scheme}://{p.netloc}"
@@ -121,10 +130,12 @@ class Settings(BaseSettings):
                 problems.append("DEV_AUTH_ENABLED must be false in production")
             if not self.cookie_secure:
                 problems.append("COOKIE_SECURE must be true in production (HTTPS)")
-            if not (self.google_client_id and self.google_client_secret):
+            if not self.poc_auth_enabled and not (self.google_client_id and self.google_client_secret):
                 problems.append("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are required in production")
             if self.database_url.startswith("sqlite"):
                 problems.append("Use PostgreSQL in production")
+            if self.office_ip_ranges and not self.trusted_proxies:
+                problems.append("OFFICE_IP_RANGES needs TRUSTED_PROXIES so the real client IP is visible behind the host's proxy")
             if self.cookie_samesite.lower() not in ("lax", "none"):
                 problems.append("COOKIE_SAMESITE must be lax or none")
             if self.cookie_samesite.lower() == "none" and not self.cookie_secure:

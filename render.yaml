@@ -1,0 +1,59 @@
+# Render Blueprint: deploys ONLY the backend (frontend goes to Vercel).
+# Place at the repo root. Render > New > Blueprint > pick this repo.
+# NOTE: persistent disks require a paid web service plan (starter or higher).
+databases:
+  - name: attendance-db
+    plan: basic-256mb
+    databaseName: attendance
+    user: attendance
+
+services:
+  - type: web
+    name: attendance-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # Production does not auto-create tables: run migrations before each start.
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT    healthCheckPath: /healthz
+    disk:
+      name: attendance-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: attendance-db
+          property: connectionString
+      - key: REPORTS_DIR
+        value: /var/data/reports
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: DEV_AUTH_ENABLED
+        value: "false"
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      # Fill these in the Render dashboard (sync: false = not stored in git)
+      - key: BASE_URL            # https://<your-service>.onrender.com
+        sync: false
+      - key: FRONTEND_URL        # https://<your-vercel-app> (https required)
+        sync: false
+      - key: COOKIE_SAMESITE     # "none" if Vercel and Render are different sites (default setup)
+        value: none
+      - key: DESKTOP_ONLY
+        value: "true"
+      - key: OFFICE_IP_RANGES    # office public IP/CIDRs, e.g. 203.0.113.10 (ask IT). Needs TRUSTED_PROXIES below
+        sync: false
+      - key: POC_AUTH_ENABLED    # POC: sign in with e-mail + employee ID (no Google). Set false + add Google keys for real use
+        value: "true"
+      - key: BOOTSTRAP_ADMIN_EMAILS
+        sync: false
+      - key: TRUSTED_PROXIES     # Render's proxy ranges; leave empty to ignore X-Forwarded-For
+        sync: false

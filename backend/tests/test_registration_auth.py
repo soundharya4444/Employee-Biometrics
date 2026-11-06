@@ -102,3 +102,15 @@ def test_returning_employee_state_has_no_registration_prompt(registered):
     me = c.get("/api/me").json()
     assert me["state"] == "registered" and me["employee"]["mail_id"] == "john.jack@gwcdata.ai"
     assert c.get("/api/attendance/today").status_code == 200           # straight to attendance
+
+
+def test_poc_login_email_plus_employee_id(client, db, settings, monkeypatch):
+    add_master(db, settings, "EMP501", "Poc User", f"poc@{DOMAIN}")
+    body = {"email": f"poc@{DOMAIN}", "employee_id": "emp501"}
+    assert client.post("/api/auth/poc-login", json=body).status_code == 404  # disabled by default
+    monkeypatch.setattr(settings, "poc_auth_enabled", True)
+    assert client.post("/api/auth/poc-login", json={**body, "employee_id": "EMP999"}).status_code == 403
+    assert client.post("/api/auth/poc-login", json={**body, "email": f"other@{DOMAIN}"}).status_code == 403
+    assert client.post("/api/auth/poc-login", json=body).json() == {"ok": True}
+    me = client.get("/api/me").json()
+    assert me["state"] == "registered" and me["employee"]["employee_id"] == "EMP501"

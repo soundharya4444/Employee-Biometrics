@@ -3,14 +3,18 @@ A dev-only JSON login exists for local development and is refused at startup in 
 After sign-in the browser is sent back to the separate frontend (settings.frontend_url)."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.deps import csrf_protect, login_session, rate_limit, settings_dep
 from app.config import Settings
+from app.database.models import Employee
 from app.database.connection import get_db
 from app.services.audit import audit
 from app.services.employee_service import email_in_domain
@@ -89,6 +93,35 @@ def dev_login(body: DevLoginIn, request: Request, db: Session = Depends(get_db),
         raise HTTPException(403, f"Only @{settings.allowed_email_domain} accounts are allowed")
     login_session(request, email=email, sub=f"dev:{email}", name=email.split("@")[0])
     audit(db, email, "LOGIN_DEV", "auth", None, {})
+    db.commit()
+    return {"ok": True}
+
+
+class PocLoginIn(BaseModel):
+    email: str = Field(max_length=320)
+    employee_id: str = Field(max_length=32)
+
+
+@router.post("/api/auth/poc-login", dependencies=[Depends(rate_limit("auth", "auth_rate_limit"))])
+def poc_login(body: PocLoginIn, request: Request, db: Session = Depends(get_db),
+              settings: Settings = Depends(settings_dep)):
+    """POC sign-in: the e-mail AND employee ID must match the same record in the HR master list. Anyone who knows both
+    can sign in as that employee, so this is for proofs of concept only (enable with POC_AUTH_ENABLED=true)."""
+    if not settings.poc_auth_enabled:
+        raise HTTPException(404)
+    email = body.email.strip().lower()
+    emp_id = body.employee_id.strip().upper()
+    emp = db.scalar(select(Employee).where(Employee.verified_email == email,
+                                           func.upper(Employee.employee_id) == emp_id))
+    if not emp or emp.account_status == "INACTIVE":
+        audit(db, email or "unknown", "LOGIN_REJECTED", "auth", None, {"reason": "poc: no matching employee"})
+        db.commit()
+        raise HTTPException(403, "E-mail and employee ID do not match an employee record.")
+    if not emp.registered_at:  # the master-list match replaces the separate registration step
+        emp.registered_at = datetime.now(UTC)
+        audit(db, email, "REGISTERED_POC", "employee", emp.employee_id, {})
+    login_session(request, email=email, sub=None, name=emp.employee_name)
+    audit(db, email, "LOGIN_POC", "auth", None, {})
     db.commit()
     return {"ok": True}
 

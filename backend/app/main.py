@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth.routes import router as auth_router
 from app.config import get_settings
+from app.services.access_policy import MESSAGES, check_access, is_restricted_path
 from app.database.connection import SessionLocal, init_db
 from app.routes.admin import router as admin_router
 from app.routes.assistant import router as assistant_router
@@ -44,6 +45,18 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="GWC Data.AI Employee Attendance API", lifespan=lifespan,
               docs_url=None if settings.is_production else "/docs",
               redoc_url=None, openapi_url=None if settings.is_production else "/openapi.json")
+
+@app.middleware("http")
+async def office_only(request: Request, call_next):
+    """Refuse phones/tablets and non-office networks on employee attendance calls (HR/admin is never restricted) (added first = innermost, so CORS headers still apply)."""
+    if request.method != "OPTIONS" and is_restricted_path(request.url.path):
+        denied = check_access(request, settings)
+        if denied:
+            reason, ip = denied
+            return JSONResponse({"detail": MESSAGES[reason], "code": "RESTRICTED", "reason": reason,
+                                 "client_ip": ip if reason == "NETWORK" else None}, status_code=403)
+    return await call_next(request)
+
 
 # Session cookie: HTTP-only, signed. SameSite=Lax works when frontend and API share a registrable domain
 # (app.example.com + api.example.com, cookie_domain=".example.com"); SameSite=None (+Secure) for different sites.

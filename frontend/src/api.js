@@ -20,12 +20,22 @@ export async function api(path, opts = {}) {
   let j = {};
   try { j = await r.json(); } catch (_) { /* empty body */ }
   if (r.status === 401) onUnauthorized(j);
+  if (r.status === 403 && j && j.code === "RESTRICTED") showRestricted(j);
   if (!r.ok && !(j && j.status)) {
     const e = new Error(typeof j.detail === "string" ? j.detail : j.message || `Request failed (${r.status})`);
     e.status = r.status; e.payload = j;
     throw e;
   }
   return j;
+}
+
+/** Office-only policy: replace the page with a "restricted" notice. */
+export function showRestricted(j) {
+  const box = el("section", { class: "panel", style: "max-width:480px;margin:40px auto;text-align:center" },
+    el("h2", {}, "Access restricted"),
+    el("p", {}, j.detail || "This page can only be used from an office computer on the office network."));
+  if (j.client_ip) box.append(el("p", { class: "muted" }, `Detected network address: ${j.client_ip}`));
+  document.body.replaceChildren(box);
 }
 
 /** Like api() but never throws on HTTP errors: returns { r, j } (used where the error body matters). */
@@ -37,6 +47,7 @@ export async function rawApi(path, opts = {}) {
   let j = {};
   try { j = await r.json(); } catch (_) { /* empty body */ }
   if (r.status === 401) onUnauthorized(j);
+  if (r.status === 403 && j && j.code === "RESTRICTED") showRestricted(j);
   return { r, j };
 }
 

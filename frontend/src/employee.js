@@ -45,17 +45,19 @@ function renderToday(a) {
 }
 
 // ---------- sign in ----------
-let devAuth = false;
+let devAuth = false, pocAuth = false;
 function setupLogin(domain) {
   if (domain) $("domain").textContent = "@" + domain;
   $("login-btn").href = loginUrl("/");
-  $("dev-form").hidden = !devAuth;
+  $("dev-form").hidden = !(devAuth || pocAuth);
+  $("dev-empid").hidden = !pocAuth; $("dev-empid").required = pocAuth;
+  if (pocAuth) { $("login-btn").hidden = true; $("dev-btn").textContent = "Sign in"; }
 }
 $("dev-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const btn = $("dev-btn"); if (btn.disabled) return; btn.disabled = true;
   try {
-    await api("/api/auth/dev-login", { method: "POST", body: JSON.stringify({ email: $("dev-email").value }) });
+    await api(pocAuth ? "/api/auth/poc-login" : "/api/auth/dev-login", { method: "POST", body: JSON.stringify(pocAuth ? { email: $("dev-email").value, employee_id: $("dev-empid").value } : { email: $("dev-email").value }) });
     await load();
   } catch (e) { message(e.message, "err"); }
   btn.disabled = false;
@@ -110,7 +112,7 @@ async function load() {
   try {
     const me = await api("/api/me");
     setCsrf(me.csrf || null);
-    if (me.state === "unauthenticated") { devAuth = !!me.dev_auth; setupLogin(me.domain); show("login"); }
+    if (me.state === "unauthenticated") { devAuth = !!me.dev_auth; pocAuth = !!me.poc_auth; setupLogin(me.domain); show("login"); }
     else if (me.state === "unregistered") { $("reg-email").textContent = me.email; $("reg-mail").value = me.email; show("register"); }
     else {
       $("d-id").textContent = me.employee.employee_id;

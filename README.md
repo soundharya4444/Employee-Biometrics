@@ -44,7 +44,7 @@ DEV_AUTH_ENABLED=true          # DEV-ONLY sign-in: accepts any @gwcdata.ai addre
 NETWORK_CHECK_ENABLED=false
 BOOTSTRAP_ADMIN_EMAILS=you@gwcdata.ai
 ```
-Backend `.env` also needs `FRONTEND_URL` (+ `CORS_EXTRA_ORIGINS`) â€“ see `.env.example`.
+Backend `.env` also needs `FRONTEND_URL` â€“ see `.env.example`.
 ```powershell
 python scripts\import_employees.py employees.csv     # employee master list (columns in script docstring)
 python scripts\seed_dev_data.py                       # optional DEV-ONLY demo employees + SAMPLE shifts
@@ -177,6 +177,20 @@ LAN-only setup cannot be used with Vercel: host the backend on a server with an 
 6. Import employees (`scripts\import_employees.py`), apply the HR shift workbook (`scripts\import_hr_workbook.py`), generate/print the QR.
 7. `storage/reports` readable only by the service account; never mounted by the web server.
 
+### D. Deploying on Render (only `backend/` and `frontend/` are deployed)
+`storage/` is **not** deployed: it holds local dev data (`dev.db`, `employees.csv`, `qr/`, `reports/`) and is gitignored.
+Render's filesystem is wiped on every deploy, so production uses:
+* **Database:** Render PostgreSQL (`DATABASE_URL`), never `dev.db`.
+* **Reports:** a Render **Persistent Disk** (paid web service plan) mounted at `/var/data`, with `REPORTS_DIR=/var/data/reports`.
+  The folder and `attendance.xlsx` are created by the app on first run.
+* **QR image / employees.csv:** generate/import locally; not needed on the server.
+
+Steps: push the repo, Render > New > Blueprint (uses `render.yaml`, which sets `rootDir: backend`, runs `alembic upgrade head`
+before each deploy, health check `/healthz`). Then fill the `sync: false` env vars in the dashboard (`BASE_URL`, `FRONTEND_URL`,
+Google keys, `BOOTSTRAP_ADMIN_EMAILS`). Finally import employees once: run `scripts\import_employees.py` locally with
+`DATABASE_URL` set to the database's *external* URL. Always run local backend commands from `backend/` (relative `./storage/...`
+paths resolve against the current folder; running from the repo root creates a stray `storage/`).
+
 ### Permanent QR code
 ```powershell
 python scripts\generate_qr.py --url https://attendance.gwcdata.ai --out storage\qr\entrance.png
@@ -202,5 +216,5 @@ encrypt; dumps contain personal data). Restore: empty DB â†’ `pg_restore -d
 ## Folder layout
 - `backend/` - everything Python: `app/`, `scripts/`, `tests/`, `storage/`, `alembic.ini`, `requirements.txt`, `.env`, `start_server.ps1`. Run all backend commands from this folder.
 - `frontend/` - everything web: `src/`, `package.json`, `vercel.json`, `.env`, `start_frontend.ps1`. Deploy this folder to Vercel (Root Directory = `frontend`).
-- The two only talk over HTTP: `VITE_API_BASE_URL` (frontend) and `FRONTEND_URL`/`CORS_EXTRA_ORIGINS` (backend).
+- The two only talk over HTTP: `VITE_API_BASE_URL` (frontend) and `FRONTEND_URL` (backend; also the single CORS origin).
 

@@ -23,10 +23,10 @@ def me(request: Request, ident: dict | None = Depends(current_identity), db: Ses
        settings: Settings = Depends(settings_dep)):
     if not ident:
         return {"state": "unauthenticated", "domain": settings.allowed_email_domain,
-                "dev_auth": settings.dev_auth_enabled}
+                "dev_auth": settings.dev_auth_enabled, "poc_auth": settings.poc_auth_enabled}
     emp = employee_by_identity(db, ident.get("sub"), ident["email"])
     base = {"email": ident["email"], "csrf": ident["csrf"], "domain": settings.allowed_email_domain,
-            "dev_auth": settings.dev_auth_enabled}
+            "dev_auth": settings.dev_auth_enabled, "poc_auth": settings.poc_auth_enabled}
     if not emp:
         return {**base, "state": "unregistered", "name": ident.get("name")}
     return {**base, "state": "registered", "employee": employee_public(emp)}
