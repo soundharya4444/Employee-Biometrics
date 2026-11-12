@@ -32,7 +32,9 @@ def make_engine(url: str) -> Engine:
         url = "postgresql://" + url[len("postgres://"):]
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return create_engine(url, pool_pre_ping=True)
+    # 30+ simultaneous punches: each request holds one connection only for a few milliseconds, but the default pool
+    # (5 + 10) would make bursts queue. Keep this below the database plan's connection limit.
+    return create_engine(url, pool_pre_ping=True, pool_size=10, max_overflow=20, pool_timeout=30)
 
 
 engine = make_engine(get_settings().database_url)

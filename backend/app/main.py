@@ -64,7 +64,7 @@ app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_co
                    max_age=settings.session_max_age_seconds, same_site=settings.cookie_samesite.lower(),
                    https_only=settings.cookie_secure, domain=settings.cookie_domain or None)
 # CORS: only the configured frontend origin(s), with credentials (cookie) and our CSRF header.
-app.add_middleware(CORSMiddleware, allow_origins=settings.frontend_origins, allow_credentials=True,
+app.add_middleware(CORSMiddleware, allow_origins=settings.frontend_origins, allow_origin_regex=settings.cors_origin_regex, allow_credentials=True,
                    allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "X-CSRF-Token"],
                    expose_headers=["Content-Disposition"], max_age=600)
 

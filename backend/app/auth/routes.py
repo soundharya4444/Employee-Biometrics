@@ -39,8 +39,16 @@ def _safe_next(n: str | None) -> str:
     return n if n in ("/", "/admin/") else "/"
 
 
-def _to_frontend(settings: Settings, path: str) -> str:
-    return settings.frontend_url.rstrip("/") + path
+def _to_frontend(settings: Settings, path: str, request: Request | None = None) -> str:
+    base = settings.frontend_origins[0] if settings.frontend_origins else settings.frontend_url.rstrip("/")
+    ref = request.headers.get("referer") if request else None  # send the user back to the frontend address they came from
+    if ref:
+        from urllib.parse import urlparse
+        p = urlparse(ref)
+        o = f"{p.scheme}://{p.netloc}"
+        if p.netloc and settings.origin_allowed(o):
+            base = o
+    return base + path
 
 
 @router.get("/auth/login", dependencies=[Depends(rate_limit("auth", "auth_rate_limit"))])
@@ -48,7 +56,7 @@ async def login(request: Request, next: str = "/", settings: Settings = Depends(
     nxt = _safe_next(next)
     if not (settings.google_client_id and settings.google_client_secret):
         if settings.dev_auth_enabled:  # frontend shows its dev sign-in form (see /api/me -> dev_auth)
-            return RedirectResponse(_to_frontend(settings, nxt))
+            return RedirectResponse(_to_frontend(settings, nxt, request))
         raise HTTPException(503, "Company sign-in is not configured (GOOGLE_CLIENT_ID/SECRET).")
     request.session["next"] = nxt
     redirect_uri = settings.base_url.rstrip("/") + "/auth/callback"

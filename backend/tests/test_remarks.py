@@ -163,3 +163,17 @@ def test_overnight_exact_end_has_no_remark(client, db, settings, freeze):
     assert punch(client, csrf, "OUT").json()["remark_required"] is None
     t = client.get("/api/attendance/today").json()
     assert t["punch_in"] == "10:00 PM" and t["punch_out"] == "06:00 AM"   # overnight session still paired
+
+
+def test_today_page_ignores_yesterdays_closed_session_and_stale_open_in(client, db, settings, freeze):
+    add_shift(db, "General", time(9, 0), time(18, 0))
+    add_master(db, settings, shift="General")
+    csrf = register(client, f"john.jack@{DOMAIN}", "EMP001")
+    freeze(2026, 11, 4, 13, 45)
+    punch(client, csrf, "IN")                      # yesterday afternoon, never closed (stale after 18h)
+    freeze(2026, 11, 5, 9, 46)
+    t = client.get("/api/attendance/today").json()
+    assert t["is_punched_in"] is False and t["punch_in"] == "Not yet punched"   # offered a fresh Punch In
+    punch(client, csrf, "IN")
+    t = client.get("/api/attendance/today").json()
+    assert t["is_punched_in"] is True and t["punch_in"] == "09:46 AM"          # today's time, not yesterday's 01:45 PM

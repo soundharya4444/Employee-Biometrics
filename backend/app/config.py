@@ -18,9 +18,10 @@ class Settings(BaseSettings):
     app_env: str = "development"  # development | production
     secret_key: str = "change-me"
     base_url: str = "http://localhost:8000"  # public URL of THIS backend API (used for the Google OAuth callback)
-    frontend_url: str = "http://localhost:5173"  # public URL of the separate frontend (QR code target, post-login redirect)
+    frontend_url: str = "http://localhost:5173"  # public URL of the separate frontend (post-login redirect)
     cookie_samesite: str = "lax"  # "lax" if frontend+backend share a registrable domain; "none" for cross-site (needs HTTPS)
     cookie_domain: str = ""  # e.g. ".gwcdata.ai" so app.gwcdata.ai and api.gwcdata.ai share the session cookie
+    allow_lan_origins: bool = True  # dev/LAN only (ignored in production): accept the frontend from ANY private-network IP, so every Wi-Fi works
     database_url: str = f"sqlite:///{(BASE_DIR / 'storage' / 'dev.db').as_posix()}"
     reports_dir: Path = BASE_DIR / "storage" / "reports"
     timezone: str = "Asia/Kolkata"
@@ -49,6 +50,7 @@ class Settings(BaseSettings):
     # Attendance policy
     # Shifts and their late/early tolerances live in the shift_master table (HR edits the Shift Master sheet).
     min_seconds_between_punches: int = 30
+    punch_in_opens_at: str = "08:45"  # HH:MM local time; Punch In is unavailable before this. Empty = always open
     stale_session_hours: int = 18
     working_days: str = "0,1,2,3,4"  # Monday=0
     attendance_policy_file: str = ""  # optional HR-authored policy text (UTF-8); shown by the assistant verbatim
@@ -60,7 +62,7 @@ class Settings(BaseSettings):
 
     # Rate limiting
     punch_rate_limit: int = 10  # per minute per client
-    auth_rate_limit: int = 20
+    auth_rate_limit: int = 120  # per minute per client IP: a whole office shares one IP at login time
 
     # Domo (nothing is assumed: endpoint path must be taken from your Domo docs)
     domo_instance_url: str = ""  # e.g. https://yourcompany.domo.com
@@ -97,6 +99,16 @@ class Settings(BaseSettings):
         return [ipaddress.ip_network(x, strict=False) for x in self._csv(self.trusted_proxies)]
 
     @property
+    def punch_in_opens_time(self):
+        """datetime.time or None. Invalid values are treated as 'no limit' rather than breaking punching."""
+        from datetime import time as _t
+        try:
+            h, m = self.punch_in_opens_at.strip().split(":")
+            return _t(int(h), int(m))
+        except (ValueError, AttributeError):
+            return None
+
+    @property
     def office_network_list(self):
         return [ipaddress.ip_network(x, strict=False) for x in self._csv(self.office_ip_ranges)]
 
@@ -109,13 +121,26 @@ class Settings(BaseSettings):
         """The single origin (from FRONTEND_URL) allowed to call this API with credentials (CORS) and to submit state-changing requests (CSRF)."""
         from urllib.parse import urlparse
         out = []
-        for u in [self.frontend_url]:
+        for u in self._csv(self.frontend_url):  # FRONTEND_URL may list several origins, comma separated
             p = urlparse(u.strip())
             if p.scheme and p.netloc:
                 o = f"{p.scheme}://{p.netloc}"
                 if o not in out:
                     out.append(o)
         return out
+
+    # Matches http://<private LAN IPv4>:<any port>, e.g. the frontend opened via either Wi-Fi's address.
+    _LAN_ORIGIN_RE = (r"^http://(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}"
+                      r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|localhost|127\.0\.0\.1)(:\d{1,5})?$")
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        return self._LAN_ORIGIN_RE if self.allow_lan_origins and not self.is_production else None
+
+    def origin_allowed(self, origin: str) -> bool:
+        import re
+        o = origin.rstrip("/")
+        return o in self.frontend_origins or bool(self.cors_origin_regex and re.match(self.cors_origin_regex, o))
 
     @property
     def working_day_set(self) -> set[int]:

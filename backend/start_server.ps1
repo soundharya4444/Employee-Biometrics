@@ -36,10 +36,10 @@ if ($old.Count -gt 0) {
     }
 }
 
-& $python -c "from app.config import get_settings as g; s=g(); print('Backend API address   :', s.base_url); print('Frontend / QR address :', s.frontend_url, '(start it with start_frontend.ps1)')"
+& $python -c "from app.config import get_settings as g; s=g(); print('Backend API address   :', s.base_url); print('Frontend address      :', s.frontend_url, '(start it with start_frontend.ps1)')"
 
-$ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like 'Wi-Fi*' } | Select-Object -First 1).IPAddress
-if ($ip) { Write-Host "This PC's Wi-Fi address now : http://${ip}:$port   (must match BASE_URL above and VITE_API_BASE_URL in frontend\.env)" }
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } |
+    ForEach-Object { Write-Host ("This PC is reachable at : http://{0}:{1}   ({2})" -f $_.IPAddress, $port, $_.InterfaceAlias) }
 
 Write-Host "Starting server... keep this window open. Press Ctrl+C to stop." -ForegroundColor Green
 & $python -W ignore -m uvicorn app.main:app --host 0.0.0.0 --port $port

@@ -77,7 +77,7 @@ def csrf_protect(request: Request, settings: Settings = Depends(settings_dep)) -
     origin = request.headers.get("origin")
     allowed = {o.rstrip("/") for o in settings.frontend_origins} | {settings.base_url.rstrip("/"),
                                                                      str(request.base_url).rstrip("/")}
-    if origin and origin.rstrip("/") not in allowed:
+    if origin and origin.rstrip("/") not in allowed and not settings.origin_allowed(origin):
         raise HTTPException(403, "Cross-origin request blocked")
 
 

@@ -9,7 +9,7 @@ os.environ.update({
     "APP_ENV": "development", "DATABASE_URL": "sqlite://", "SECRET_KEY": "test-secret-key-test-secret-key-123",
     "DEV_AUTH_ENABLED": "true", "REPORTS_DIR": str(Path(_tmp) / "reports"),
     "BOOTSTRAP_ADMIN_EMAILS": "boss@gwcdata.ai,boss2@gwcdata.ai", "GOOGLE_CLIENT_ID": "", "GOOGLE_CLIENT_SECRET": "",
-    "MIN_SECONDS_BETWEEN_PUNCHES": "0", "PUNCH_RATE_LIMIT": "1000", "AUTH_RATE_LIMIT": "1000",
+    "MIN_SECONDS_BETWEEN_PUNCHES": "0", "PUNCH_IN_OPENS_AT": "", "PUNCH_RATE_LIMIT": "1000", "AUTH_RATE_LIMIT": "1000",
     "ASSISTANT_RATE_LIMIT": "1000", "DOMO_INSTANCE_URL": "", "DOMO_DEVELOPER_TOKEN": "", "DOMO_LLM_ENDPOINT_PATH": "",
     "MONITOR_ENABLED": "false", "ATTENDANCE_POLICY_FILE": "",
     # pinned so the tests never depend on the developer's real .env

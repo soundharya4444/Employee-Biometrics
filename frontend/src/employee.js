@@ -13,6 +13,7 @@ function renderClock() {
     .formatToParts(now).map((x) => [x.type, x.value]));
   $("clock-time").textContent = t;
   $("clock-date").textContent = `${p.weekday}, ${p.day} ${p.month} ${p.year}`;
+  applyPunchState();  // enables Punch In the moment the opening time arrives
 }
 async function syncClock() {
   try {
@@ -34,13 +35,32 @@ function message(text, kind) {
 }
 setUnauthorizedHandler(() => { show("login"); setupLogin(); });
 
+// Punch In is unavailable before the configured time (server enforces it too; this only avoids a pointless click).
+let todayView = null;
+function istMinutes() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(new Date(Date.now() + offset)).map((x) => [x.type, x.value]));
+  return (+p.hour % 24) * 60 + +p.minute;
+}
+function applyPunchState() {
+  if (!todayView || inflight) return;
+  const a = todayView;
+  let early = false;
+  if (a.punch_in_opens_at) { const [h, m] = a.punch_in_opens_at.split(":").map(Number); early = istMinutes() < h * 60 + m; }
+  $("btn-in").disabled = a.is_punched_in || early;
+  $("btn-out").disabled = !a.is_punched_in;
+  const hint = $("in-hint");
+  hint.hidden = !(early && !a.is_punched_in);
+  if (!hint.hidden) hint.textContent = `Punch In opens at ${new Date(2000, 0, 1, ...a.punch_in_opens_at.split(":").map(Number)).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}.`;
+}
+
 function renderToday(a) {
+  todayView = a;
   $("t-in").textContent = a.punch_in;
   $("t-out").textContent = a.punch_out;
   $("t-hours").textContent = a.working_hours + (a.is_punched_in && a.elapsed ? ` (${a.elapsed} so far)` : "");
   $("t-shift").textContent = a.shift ? `${a.shift.name}  ${a.shift.start} – ${a.shift.end}` : "Not configured – contact HR";
-  $("btn-in").disabled = a.is_punched_in;
-  $("btn-out").disabled = !a.is_punched_in;
+  applyPunchState();
   renderRemarkForm((a.pending_remarks || [])[0]);
 }
 
@@ -121,7 +141,7 @@ async function load() {
       show("main");
       if (me.employee.account_status !== "ACTIVE") {
         message("Your account is awaiting HR approval or is inactive. Punching is disabled.", "err");
-        $("btn-in").disabled = $("btn-out").disabled = true;
+        todayView = null; $("btn-in").disabled = $("btn-out").disabled = true;
         return;
       }
       renderToday(await api("/api/attendance/today"));
@@ -159,7 +179,7 @@ async function punch(type) {
   } catch (e) {
     message(e.message, "err");
     try { renderToday(await api("/api/attendance/today")); } catch (_) {}
-  } finally { btn.classList.remove("busy"); inflight = false; }
+  } finally { btn.classList.remove("busy"); inflight = false; applyPunchState(); }
 }
 $("btn-in").addEventListener("click", () => punch("IN"));   // one tap
 $("btn-out").addEventListener("click", () => punch("OUT"));

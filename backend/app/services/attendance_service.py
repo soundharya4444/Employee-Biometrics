@@ -158,6 +158,9 @@ def record_punch(db: Session, settings: Settings, emp: Employee, event_type: str
             if dup:  # idempotent replay of the same click/request
                 rem = db.scalar(select(AttendanceRemark).where(AttendanceRemark.attendance_id == dup.attendance_id))
                 return dup, rem
+        opens = settings.punch_in_opens_time
+        if event_type == "IN" and opens and now.astimezone(settings.tz).time() < opens:
+            raise PunchError("too_early", f"Punch In opens at {opens.strftime('%I:%M %p')}.", 403)
         recent = _events(db, emp.id, now - timedelta(days=settings.stale_session_hours // 24 + 3),
                          now + timedelta(minutes=1))
         last = recent[-1] if recent else None
@@ -200,8 +203,14 @@ def today_view(db: Session, settings: Settings, emp: Employee) -> dict:
     today = now_utc().astimezone(settings.tz).date()
     now = now_utc()
     ss = sessions_for_range(db, settings, today - timedelta(days=1), today, emp.id).get(emp.id, [])
-    # today's sessions, an open one from yesterday, or an overnight session that ended this morning
-    ss = [s for s in ss if s.work_date == today or s.open or (s.out_ts and local_date(s.out_ts, settings) == today)]
+    # Never-closed punch-ins older than STALE_SESSION_HOURS are history, not "currently punched in": record_punch lets
+    # the employee punch in again, so the page must offer it too (and must not show yesterday's time as today's).
+    stale_cut = now - timedelta(hours=settings.stale_session_hours)
+    ss = [s for s in ss if not (s.open and s.in_ts and s.in_ts < stale_cut)]
+    # today's work, plus a live (non-stale) open session carried over from yesterday (e.g. night shift) ...
+    current = [s for s in ss if s.work_date == today or s.open]
+    # ... and only when there is none of that, an overnight session that ended this morning
+    ss = current or [s for s in ss if s.out_ts and local_date(s.out_ts, settings) == today]
     summ = summarise_day(ss)
     secs = summ["seconds"] + sum(int((now - s.in_ts).total_seconds()) for s in ss if s.open and s.in_ts)
     shift, issue = sh.resolve_shift(emp, sh.load_shifts(db))
@@ -212,6 +221,8 @@ def today_view(db: Session, settings: Settings, emp: Employee) -> dict:
         "working_hours": "In progress" if summ["open"] else (fmt_duration(secs) if secs else "—"),
         "elapsed": fmt_duration(secs) if secs else None,
         "is_punched_in": summ["open"],
+        "punch_in_opens_at": settings.punch_in_opens_time.strftime("%H:%M") if settings.punch_in_opens_time else None,
+        "can_punch_in": not settings.punch_in_opens_time or now.astimezone(settings.tz).time() >= settings.punch_in_opens_time,
         "shift": ({"name": shift.name, "start": sh.fmt_clock(shift.start), "end": sh.fmt_clock(shift.end)}
                   if shift else None),
         "shift_issue": issue,

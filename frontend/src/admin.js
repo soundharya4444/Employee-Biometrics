@@ -25,6 +25,62 @@ const daysAgo = (n) => new Date(Date.now() - n * 864e5).toLocaleDateString("en-C
 const field = (label, input) => el("label", {}, label, " ", input);
 const q = (o) => Object.entries(o).filter(([, v]) => v !== "" && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
 
+// ---- plain-language rendering of assistant results (no JSON for HR) ----
+const names = (arr) => (arr || []).map((x) => (x && x.employee_name ? `${x.employee_name} (${x.employee_id})` : (x && x.employee_id) || x)).join(", ");
+function block(title, items) {
+  return el("div", { style: "margin:10px 0" }, el("strong", {}, title), items.length
+    ? el("ul", { style: "margin:4px 0 0 18px" }, items.map((t) => el("li", {}, t))) : el("p", { class: "muted", style: "margin:4px 0" }, "Nothing to report."));
+}
+function friendlyError(x) {
+  const t = String(x || "");
+  if (/not configured|unavailable/i.test(t)) return "The AI helper is not connected right now. Please ask IT to check the AI settings.";
+  if (/HTTP 4\d\d|HTTP 5\d\d|request failed|timed out/i.test(t)) return "The AI helper could not be reached just now. Please try again in a minute.";
+  return "Something went wrong while preparing this summary. Please try again.";
+}
+function showDaily(out, r) {
+  const f = r.figures;
+  if (!f) { out.replaceChildren(el("p", {}, friendlyError(r.error || r.message))); return; }
+  const n = r.narrative;
+  const box = el("div", { class: "panel" }, el("h3", { style: "margin-top:0" }, `Attendance summary for ${f.date}`));
+  if (n && n.headline) box.append(el("p", {}, el("strong", {}, n.headline)));
+  box.append(el("p", {}, `${f.punched_in_count} of ${f.total_active_employees} employees have punched in today; ${f.currently_working_count} are working right now.`));
+  box.append(block("Not punched in yet", [names(f.not_punched_in)].filter(Boolean)));
+  box.append(block("Forgot to punch out", [names(f.missing_punch_out)].filter(Boolean)));
+  box.append(block("Came in late", [names(f.late_arrivals)].filter(Boolean)));
+  box.append(block("Left early", [names(f.early_departures)].filter(Boolean)));
+  box.append(el("p", {}, `Explanations waiting from employees: ${f.remarks_pending}. Explanations received: ${f.remarks_submitted}.`));
+  if (n) {
+    box.append(block("What needs attention", n.attention_items || []));
+    box.append(block("Suggested next steps", n.recommendations || []));
+  } else {
+    box.append(el("p", { class: "muted" }, "The numbers above are exact. The written commentary is unavailable right now: " + friendlyError(r.error || r.message)));
+  }
+  out.replaceChildren(box);
+}
+function showAdvice(out, res) {
+  const rec = (res.recommendations || []), esc = (res.escalations || []);
+  out.replaceChildren(...(rec.length ? [block("Suggested next steps", rec)] : []), ...(esc.length ? [block("Please look at", esc)] : []));
+}
+function showMonitor(out, r) {
+  const c = r.counts || {};
+  const box = el("div", { class: "panel" }, el("h3", { style: "margin-top:0" }, "Attendance check result"));
+  const quick = [
+    `Forgotten punch-outs/punch-ins (last 3 days): ${c.missing_punches ?? 0}`,
+    `Late or early cases (last 3 days): ${c.late_or_early_last_3_days ?? 0}`,
+    `Explanations waiting from employees: ${c.pending_remarks ?? 0}`,
+    `Employees often late (3+ times in 2 weeks): ${c.repeated_late_employees_14d ?? 0}`];
+  if (r.status === "no_analysis_needed") box.append(el("p", {}, "All clear: nothing needs HR attention right now."));
+  else if (r.status === "unchanged") box.append(el("p", {}, "Nothing new since the last check."));
+  else if (r.status === "complete" && r.result && r.result.answer) {
+    box.append(el("p", {}, r.result.answer));
+    if ((r.result.recommendations || []).length) box.append(block("Suggested next steps", r.result.recommendations));
+    if (r.result.human_review_required) box.append(el("span", { class: "tag" }, "Please review this personally"));
+  } else if (r.status === "complete" && r.answer) box.append(el("p", {}, r.answer));
+  else box.append(el("p", {}, friendlyError(r.error || r.message || r.status)));
+  box.append(block("At a glance", quick));
+  out.replaceChildren(box);
+}
+
 const tabs = {
   // ---------------- Dashboard (+ Excel downloads) ----------------
   Dashboard: async () => {
@@ -125,14 +181,14 @@ const tabs = {
   Assistant: async () => {
     const [st, latest] = await Promise.all([api("/admin/api/agent/status"), api("/admin/api/agent/monitor/latest")]);
     const lm = latest.latest;
-    const monitorBox = el("div", { class: "panel" }, el("h3", { style: "margin-top:0" }, "Latest monitoring summary"),
+    const monitorBox = el("div", { class: "panel" }, el("h3", { style: "margin-top:0" }, "Latest automatic check"),
       lm ? el("div", {}, el("p", { class: "muted" }, `${lm.when.replace("T", " ").slice(0, 19)} UTC · ${lm.status}`),
         el("p", {}, lm.answer || lm.error || "No analysis was needed (no new findings)."),
         lm.human_review_required ? el("span", { class: "tag" }, "Human review recommended") : "")
         : el("p", { class: "muted" }, "No monitoring run yet."));
     const log = el("div", { class: "chat-log" }), box = el("input", { size: 70, placeholder: "e.g. Who has missing punch-outs this week? Investigate the latest late remark of 210145." });
     let hist = [];
-    const out = el("pre");
+    const out = el("div");
     const ask = async () => {
       const text = box.value.trim(); if (!text) return; box.value = "";
       log.append(el("div", { class: "u" }, text)); const w = el("div", { class: "a" }, "Working…"); log.append(w);
@@ -141,17 +197,18 @@ const tabs = {
       w.textContent = r.ok ? (res.answer || "No answer") : (j.message || j.detail || j.error || "Error");
       if (res.evidence && res.evidence.length) w.append(el("ul", {}, res.evidence.map((x) => el("li", {}, x))));
       if (res.human_review_required) w.append(el("div", { class: "tag" }, "Human review recommended"));
-      out.textContent = JSON.stringify({ tools: (j.trace || []).map((t) => `${t.tool}${t.ok ? "" : " (failed: " + t.error + ")"}`), recommendations: res.recommendations, escalations: res.escalations, missing_configuration: j.missing_configuration }, null, 2);
+      showAdvice(out, res);
       hist = [...hist, { role: "user", text }, { role: "assistant", text: res.answer || "" }].slice(-6);
     };
     box.addEventListener("keydown", (e) => { if (e.key === "Enter") ask(); });
     view.replaceChildren(
-      el("p", {}, st.configured ? "Domo LLM: configured" : "Domo LLM NOT configured - AI analysis unavailable. Missing: " + st.missing.join(", ")),
-      el("p", { class: "muted" }, `Scheduled monitor: ${st.monitor_enabled ? "every " + st.monitor_interval_minutes + " min" : "disabled"}`),
+      el("p", {}, st.configured ? "AI helper: connected" : "AI helper: not connected. Please ask IT to set it up (missing: " + st.missing.join(", ") + ")"),
+      el("p", { class: "muted" }, `Automatic checks: ${st.monitor_enabled ? "run every " + st.monitor_interval_minutes + " minutes" : "turned off"}`),
       monitorBox, log, el("div", { class: "row" }, box, el("button", { class: "btn", onclick: ask }, "Ask")),
       canWrite() ? el("div", { class: "row" },
-        el("button", { class: "btn", onclick: async () => { out.textContent = "Working…"; try { out.textContent = JSON.stringify(await post("/admin/api/agent/daily-summary"), null, 2); } catch (e) { out.textContent = e.message; } } }, "Daily summary (today)"),
-        el("button", { class: "btn", onclick: async () => { out.textContent = "Working…"; try { out.textContent = JSON.stringify(await post("/admin/api/agent/monitor/run"), null, 2); } catch (e) { out.textContent = e.payload ? JSON.stringify(e.payload, null, 2) : e.message; } } }, "Run monitor now")) : "",
+        el("button", { class: "btn", onclick: async () => { out.replaceChildren(el("p", {}, "Preparing today's summary… this can take up to a minute.")); try { showDaily(out, await post("/admin/api/agent/daily-summary")); } catch (e) { out.replaceChildren(el("p", {}, friendlyError(e.message))); } } }, "Today's attendance summary"),
+        el("button", { class: "btn", onclick: async () => { out.replaceChildren(el("p", {}, "Checking attendance… this can take up to a minute.")); try { showMonitor(out, await post("/admin/api/agent/monitor/run")); } catch (e) { e.payload && e.payload.counts ? showMonitor(out, e.payload) : out.replaceChildren(el("p", {}, friendlyError(e.message))); } } }, "Check for problems now")) : "",
+      el("p", { class: "muted" }, "Today's attendance summary: who is in, late, left early or forgot to punch out. Check for problems now: looks at the last few days for missed punches and unanswered late/early explanations."),
       out);
   },
 };

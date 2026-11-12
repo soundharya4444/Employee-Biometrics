@@ -1,7 +1,7 @@
 ﻿# GWC Data.AI â€“ Agentic Employee Attendance System
 
 **Two separate projects:** `backend/` = FastAPI backend (API only, no HTML) Â· `frontend/` = Vite static site (employee page +
-admin portal) built with `npm run build` and deployed to Vercel. Permanent QR â†’ company-authenticated punch in/out â†’ database as source of truth â†’ shift-aware
+admin portal) built with `npm run build` and deployed to Vercel. Shared page link â†’ company-authenticated punch in/out â†’ database as source of truth â†’ shift-aware
 late/early remarks â†’ generated Excel workbook (HR maintains Shift Master / Employee Master in it) â†’ admin-only portal â†’
 **one combined Employee + HR assistant** driven by the Domo LLM through 12 audited tools, plus scheduled monitoring.
 
@@ -23,7 +23,7 @@ app/                      BACKEND (Python, API only)
 frontend/                 FRONTEND (Vite, plain JS) -> `npm run build` -> dist/
   index.html              employee page            admin/index.html   admin portal
   src/api.js employee.js admin.js style.css        vercel.json  .env.example
-scripts/       generate_qr.py import_employees.py import_hr_workbook.py generate_excel.py seed_dev_data.py (dev only)
+scripts/       import_employees.py import_hr_workbook.py generate_excel.py seed_dev_data.py (dev only)
 storage/       reports/ (NOT web-served)    tests/ (backend tests)
 ```
 
@@ -53,7 +53,7 @@ cd ..\frontend; .\start_frontend.ps1                  # frontend -> http://<this
 pytest                                                # backend tests, in-memory SQLite
 ```
 Frontend only, with hot reload: `cd frontend; npm install; npm run dev` (http://localhost:5173, API from `frontend\.env`).
-Backend API docs (dev only): `/docs`. The backend serves no HTML: open the **frontend** address (the one in the QR).
+Backend API docs (dev only): `/docs`. The backend serves no HTML: open the **frontend** address (the page link you share).
 
 ### Admin portal (6 pages): Dashboard Â· Attendance Â· Monthly Â· Remarks Â· Employees Â· Assistant
 * **Dashboard** also has the Excel downloads: **full workbook** (all 5 sheets) or **attendance only** (just the Daily
@@ -79,7 +79,7 @@ Employees without a valid mapping are flagged (dashboard, Employee Master "Shift
 guessed schedule â€“ no remark is requested for them.
 
 ## Employee flow
-1. Scan the QR â†’ company Google sign-in (`hd=gwcdata.ai`; backend re-checks `email_verified`, domain and `hd`).
+1. Open the page link â†’ company Google sign-in (`hd=gwcdata.ai`; backend re-checks `email_verified`, domain and `hd`).
 2. First time only: Employee ID (+name) is linked to the verified Google subject. With `REQUIRE_MASTER_LIST=true` the ID
    **and e-mail** must match the imported list. With it `false`, registrations are `PENDING_APPROVAL` until HR activates.
 3. Returning (same or new device): sign-in resolves the existing profile â€“ never a second registration. Session cookie is
@@ -149,7 +149,7 @@ recorded (`REPORT_ERROR` audit) and retried automatically every 45 s (e.g. while
    `npm run build`, output `dist` (already in `frontend/vercel.json`).
 2. Environment variable **`VITE_API_BASE_URL`** = the public **HTTPS** URL of the backend (no trailing slash). It is baked in at build
    time, so redeploy after changing it. Locally: `cd frontend; npm install; npm run build` produces `frontend/dist`.
-3. The QR code points to the Vercel address: `python scripts\generate_qr.py --url https://<your-vercel-or-custom-domain>`.
+3. Share the Vercel address (or your custom domain) with employees; there is no QR code.
 
 ### B. Backend must be reachable from the internet over HTTPS
 Vercel hosts only the static frontend. A browser on an `https://` page **cannot call an `http://192.168â€¦` API (mixed content)**, so the
@@ -174,29 +174,22 @@ LAN-only setup cannot be used with Vercel: host the backend on a server with an 
    `TRUSTED_PROXIES=127.0.0.1/32`; the proxy must overwrite `X-Forwarded-For`.
 5. Run **one** app process, or accept: rate limiter is per-process, and each worker would run its own monitor
    (use a single scheduler instance when scaling out). Workbook writes are file-locked.
-6. Import employees (`scripts\import_employees.py`), apply the HR shift workbook (`scripts\import_hr_workbook.py`), generate/print the QR.
+6. Import employees (`scripts\import_employees.py`), apply the HR shift workbook (`scripts\import_hr_workbook.py`).
 7. `storage/reports` readable only by the service account; never mounted by the web server.
 
 ### D. Deploying on Render (only `backend/` and `frontend/` are deployed)
-`storage/` is **not** deployed: it holds local dev data (`dev.db`, `employees.csv`, `qr/`, `reports/`) and is gitignored.
+`storage/` is **not** deployed: it holds local dev data (`dev.db`, `employees.csv`, `reports/`) and is gitignored.
 Render's filesystem is wiped on every deploy, so production uses:
 * **Database:** Render PostgreSQL (`DATABASE_URL`), never `dev.db`.
 * **Reports:** a Render **Persistent Disk** (paid web service plan) mounted at `/var/data`, with `REPORTS_DIR=/var/data/reports`.
   The folder and `attendance.xlsx` are created by the app on first run.
-* **QR image / employees.csv:** generate/import locally; not needed on the server.
+* **employees.csv:** import locally; not needed on the server.
 
 Steps: push the repo, Render > New > Blueprint (uses `render.yaml`, which sets `rootDir: backend`, runs `alembic upgrade head`
 before each deploy, health check `/healthz`). Then fill the `sync: false` env vars in the dashboard (`BASE_URL`, `FRONTEND_URL`,
 Google keys, `BOOTSTRAP_ADMIN_EMAILS`). Finally import employees once: run `scripts\import_employees.py` locally with
 `DATABASE_URL` set to the database's *external* URL. Always run local backend commands from `backend/` (relative `./storage/...`
 paths resolve against the current folder; running from the repo root creates a stray `storage/`).
-
-### Permanent QR code
-```powershell
-python scripts\generate_qr.py --url https://attendance.gwcdata.ai --out storage\qr\entrance.png
-```
-Contains only the URL (no query/employee data); same for everyone; `FRONTEND_URL` changes the default. Print the â‰ˆ2000 px PNG at
-â‰¥15Ã—15 cm on matte stock at ~1.2â€“1.5 m near the entrance, test-scan with Android and iPhone. No screen or laptop needed.
 
 ## Security summary
 HTTP-only SameSite signed session cookie (Secure in prod) Â· session-bound CSRF + Origin check on writes Â· CSP/HSTS/nosniff Â·

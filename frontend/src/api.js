@@ -1,5 +1,11 @@
 // Shared helpers: talk to the FastAPI backend (a different origin) with the session cookie.
-export const API = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/+$/, "");
+// VITE_API_BASE_URL=https://api.example.com  -> fixed (production).
+// VITE_API_BASE_URL=auto (or empty)           -> LAN mode: the backend is on the SAME host the page was opened from, port 8000.
+//   So opening the site via either Wi-Fi's IP (http://192.168.0.210:4173 or http://192.168.31.169:4173) automatically
+//   talks to the backend on that same IP. Port can be changed with VITE_API_PORT.
+const cfg = (import.meta.env.VITE_API_BASE_URL || "auto").trim();
+const autoBase = `${location.protocol}//${location.hostname}:${import.meta.env.VITE_API_PORT || 8000}`;
+export const API = (cfg === "auto" ? autoBase : cfg).replace(/\/+$/, "");
 
 let csrf = null;
 let onUnauthorized = () => {};
